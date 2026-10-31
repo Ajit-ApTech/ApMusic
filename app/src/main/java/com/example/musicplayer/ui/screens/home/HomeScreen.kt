@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.musicplayer.domain.model.Album
+import com.example.musicplayer.domain.model.Artist
+import com.example.musicplayer.domain.model.Playlist
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.ui.navigation.Screen
 import com.example.musicplayer.ui.theme.PastelBorder
@@ -70,7 +76,11 @@ fun HomeScreen(
 ) {
     val trendingTracks by viewModel.trending.collectAsState()
     val recentPlays by viewModel.recentPlays.collectAsState()
+    val newReleases by viewModel.newReleases.collectAsState()
+    val popularArtists by viewModel.popularArtists.collectAsState()
+    val featuredPlaylists by viewModel.featuredPlaylists.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isLoadingBrowse by viewModel.isLoadingBrowse.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val activeProvider by viewModel.activeProvider.collectAsState()
     val downloadedTracks by viewModel.downloadedTracks.collectAsState(initial = emptyList())
@@ -170,6 +180,68 @@ fun HomeScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // New Releases Section
+            if (newReleases.isNotEmpty()) {
+                item {
+                    HomeSectionHeader(
+                        title = "New Releases",
+                        subtitle = "${newReleases.size} albums",
+                        onSeeAllClick = { navController.navigate(Screen.Search.route) }
+                    )
+                }
+                item {
+                    AlbumCarousel(
+                        albums = newReleases,
+                        onItemClick = { album -> navController.navigate("album/${album.id}") }
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+            }
+
+            // Featured Playlists Section
+            if (featuredPlaylists.isNotEmpty()) {
+                item {
+                    HomeSectionHeader(
+                        title = "Featured Playlists",
+                        subtitle = "${featuredPlaylists.size} playlists",
+                        onSeeAllClick = { navController.navigate(Screen.Search.route) }
+                    )
+                }
+                item {
+                    PlaylistCarousel(
+                        playlists = featuredPlaylists,
+                        onItemClick = { /* TODO: playlist detail */ }
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+            }
+
+            // Popular Artists Section
+            if (popularArtists.isNotEmpty()) {
+                item {
+                    HomeSectionHeader(
+                        title = "Popular Artists",
+                        subtitle = "${popularArtists.size} artists",
+                        onSeeAllClick = { /* TODO: artists list */ }
+                    )
+                }
+                item {
+                    ArtistCarousel(
+                        artists = popularArtists,
+                        onItemClick = { artist ->
+                            navController.navigate("artist/${artist.id}")
+                        }
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(18.dp))
                 }
             }
 
@@ -278,6 +350,269 @@ fun HomeScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun HomeSectionHeader(
+    title: String,
+    subtitle: String,
+    onSeeAllClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = title,
+                color = PastelTextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subtitle,
+                color = PastelLavender,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Text(
+            text = "See all",
+            color = PastelMint,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onSeeAllClick() }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun AlbumCarousel(
+    albums: List<Album>,
+    onItemClick: (Album) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(albums, key = { "album_${it.id}" }) { album ->
+            AlbumCard(
+                album = album,
+                onClick = { onItemClick(album) }
+            )
+        }
+    }
+}
+
+@Composable
+fun AlbumCard(
+    album: Album,
+    onClick: () -> Unit
+) {
+    val cardWidth = 148.dp
+    Surface(
+        modifier = Modifier
+            .width(cardWidth)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .border(1.dp, PastelBorder, RoundedCornerShape(16.dp)),
+        color = PastelCard
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!album.artworkUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = album.artworkUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PastelCardElevated)
+                    ) {
+                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = PastelLavender, modifier = Modifier.size(40.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = album.name,
+                color = PastelTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = album.artist,
+                color = PastelTextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun PlaylistCarousel(
+    playlists: List<Playlist>,
+    onItemClick: (Playlist) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(playlists, key = { "playlist_${it.id}" }) { playlist ->
+            PlaylistCard(
+                playlist = playlist,
+                onClick = { onItemClick(playlist) }
+            )
+        }
+    }
+}
+
+@Composable
+fun PlaylistCard(
+    playlist: Playlist,
+    onClick: () -> Unit
+) {
+    val cardWidth = 148.dp
+    Surface(
+        modifier = Modifier
+            .width(cardWidth)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .border(1.dp, PastelBorder, RoundedCornerShape(16.dp)),
+        color = PastelCard
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!playlist.name.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(PastelLavender.copy(alpha = 0.3f), PastelMint.copy(alpha = 0.2f))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.QueueMusic, contentDescription = null, tint = PastelMint, modifier = Modifier.size(40.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = playlist.name,
+                color = PastelTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun ArtistCarousel(
+    artists: List<Artist>,
+    onItemClick: (Artist) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        items(artists, key = { "artist_${it.id}" }) { artist ->
+            ArtistCard(
+                artist = artist,
+                onClick = { onItemClick(artist) }
+            )
+        }
+    }
+}
+
+@Composable
+fun ArtistCard(
+    artist: Artist,
+    onClick: () -> Unit
+) {
+    val cardWidth = 148.dp
+    Surface(
+        modifier = Modifier
+            .width(cardWidth)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .border(1.dp, PastelBorder, RoundedCornerShape(16.dp)),
+        color = PastelCard
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!artist.artworkUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = artist.artworkUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PastelCardElevated)
+                    ) {
+                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = PastelLavender, modifier = Modifier.size(40.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = artist.name,
+                color = PastelTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

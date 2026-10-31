@@ -32,7 +32,7 @@ class MusicControllerManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: MusicRepository,
     private val encryptedPrefs: EncryptedPrefs
-) {
+ ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -58,6 +58,10 @@ class MusicControllerManager @Inject constructor(
 
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
+
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs.asStateFlow()
+    private var sleepTimerJob: kotlinx.coroutines.Job? = null
 
     init {
         initializeController()
@@ -360,6 +364,62 @@ class MusicControllerManager @Inject constructor(
                 val lastTrack = persisted.firstOrNull { it.id == lastId } ?: persisted.firstOrNull()
                 _currentTrack.value = lastTrack
                 _playbackPositionMs.value = encryptedPrefs.getLastPositionMs()
+            }
+        }
+    }
+
+    fun startSleepTimer(durationMs: Long) {
+        sleepTimerJob?.cancel()
+        if (durationMs <= 0L) {
+            _sleepTimerRemainingMs.value = null
+            return
+        }
+        sleepTimerJob = scope.launch {
+            var remaining = durationMs
+            while (remaining > 0L && isActive) {
+                _sleepTimerRemainingMs.value = remaining
+                delay(1000L)
+                remaining -= 1000L
+            }
+            _sleepTimerRemainingMs.value = null
+            controller?.pause()
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _sleepTimerRemainingMs.value = null
+    }
+
+    fun removeQueueItem(index: Int) {
+        val q = _queue.value.toMutableList()
+        if (index in q.indices) {
+            q.removeAt(index)
+            _queue.value = q
+            scope.launch(Dispatchers.IO) {
+                repository.saveQueue(q)
+            }
+        }
+    }
+
+    fun clearQueue() {
+        _queue.value = emptyList()
+        controller?.stop()
+        _currentTrack.value = null
+        scope.launch(Dispatchers.IO) {
+            repository.saveQueue(emptyList())
+        }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val q = _queue.value.toMutableList()
+        if (fromIndex in q.indices && toIndex in q.indices) {
+            val item = q.removeAt(fromIndex)
+            q.add(toIndex, item)
+            _queue.value = q
+            scope.launch(Dispatchers.IO) {
+                repository.saveQueue(q)
             }
         }
     }

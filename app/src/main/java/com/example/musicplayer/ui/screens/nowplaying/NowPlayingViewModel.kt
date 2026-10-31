@@ -9,8 +9,10 @@ import com.example.musicplayer.util.AudioEffectManager
 import com.example.musicplayer.util.EqualizerState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.example.musicplayer.domain.model.Playlist
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,6 +37,32 @@ class NowPlayingViewModel @Inject constructor(
     val playlists: StateFlow<List<Playlist>> = repository.getPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Lyrics
+    private val _lyrics = MutableStateFlow<String?>(null)
+    val lyrics: StateFlow<String?> = _lyrics.asStateFlow()
+    private var currentLyricsTrackId: String? = null
+
+    fun loadLyrics(trackId: String) {
+        if (currentLyricsTrackId == trackId && _lyrics.value != null) return
+        currentLyricsTrackId = trackId
+        viewModelScope.launch {
+            _lyrics.value = repository.getLyrics(trackId)
+        }
+    }
+
+    fun clearLyrics() {
+        _lyrics.value = null
+        currentLyricsTrackId = null
+    }
+
+    val sleepTimerRemainingMs: StateFlow<Long?> = controllerManager.sleepTimerRemainingMs
+
+    fun startSleepTimer(durationMs: Long) = controllerManager.startSleepTimer(durationMs)
+    fun cancelSleepTimer() = controllerManager.cancelSleepTimer()
+
+    fun removeQueueItem(index: Int) = controllerManager.removeQueueItem(index)
+    fun clearQueue() = controllerManager.clearQueue()
+    fun moveQueueItem(from: Int, to: Int) = controllerManager.moveQueueItem(from, to)
     fun togglePlayPause() = controllerManager.togglePlayPause()
     fun skipNext() = controllerManager.skipNext()
     fun skipPrevious() = controllerManager.skipPrevious()

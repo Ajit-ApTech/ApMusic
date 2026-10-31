@@ -1,6 +1,9 @@
 package com.example.musicplayer.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -38,7 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,17 +85,29 @@ fun MiniPlayer(
             isFav = viewModel.isFavorite(track.id)
         }
 
+        val favScale by animateFloatAsState(
+            targetValue = if (isFav) 1.2f else 1.0f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+            label = "miniFavScale"
+        )
+
         val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
 
         Surface(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 6.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .border(1.dp, PastelBorder, RoundedCornerShape(18.dp))
+                .shadow(
+                    elevation = 16.dp,
+                    shape = RoundedCornerShape(20.dp),
+                    ambientColor = PastelMint.copy(alpha = 0.25f),
+                    spotColor = PastelLavender.copy(alpha = 0.2f)
+                )
+                .clip(RoundedCornerShape(20.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
                 .clickable { onExpand() },
-            color = PastelCardElevated,
-            tonalElevation = 8.dp
+            color = PastelCardElevated.copy(alpha = 0.96f),
+            tonalElevation = 10.dp
         ) {
             Column {
                 Row(
@@ -98,29 +116,34 @@ fun MiniPlayer(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Artwork Thumbnail with rounded corner
+                    // Artwork Thumbnail with rounded corner and subtle border
                     if (!track.artworkUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = track.artworkUrl,
                             contentDescription = "Track Art",
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(10.dp)),
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(0.8.dp, PastelBorder, RoundedCornerShape(12.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(PastelMint.copy(alpha = 0.15f)),
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(PastelMint.copy(alpha = 0.35f), PastelLavender.copy(alpha = 0.2f))
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Filled.MusicNote,
                                 contentDescription = null,
                                 tint = PastelMint,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -142,17 +165,24 @@ fun MiniPlayer(
                             text = track.artist,
                             color = PastelTextSecondary,
                             fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    // Like Button (Pastel Rose)
+                    // Like Button with bounce scale
                     IconButton(
                         onClick = {
                             viewModel.toggleFavorite(track, isFav)
                             isFav = !isFav
-                        }
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .graphicsLayer {
+                                scaleX = favScale
+                                scaleY = favScale
+                            }
                     ) {
                         Icon(
                             imageVector = if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -162,33 +192,44 @@ fun MiniPlayer(
                         )
                     }
 
-                    // Play/Pause Button in sleek ring style
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Tactile Play/Pause Hero Button with gradient fill
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(40.dp)
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = CircleShape,
+                                ambientColor = PastelMint.copy(alpha = 0.5f),
+                                spotColor = PastelLavender.copy(alpha = 0.4f)
+                            )
                             .clip(CircleShape)
-                            .background(PastelDarkBg)
-                            .border(1.5.dp, PastelMint, CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(PastelMint, PastelLavender)
+                                )
+                            )
                             .clickable { viewModel.togglePlayPause() },
-                        contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = PastelMint,
-                            modifier = Modifier.size(20.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
-                // Pastel progress line
+                // Micro Progress Line along bottom edge
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(2.5.dp),
                     color = PastelMint,
-                    trackColor = PastelBorder
+                    trackColor = PastelBorder.copy(alpha = 0.4f)
                 )
             }
         }

@@ -83,6 +83,7 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.squareup.moshi:moshi:1.15.1")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+    implementation("com.google.code.gson:gson:2.11.0")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")

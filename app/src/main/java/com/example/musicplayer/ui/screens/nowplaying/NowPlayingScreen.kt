@@ -1,5 +1,9 @@
 package com.example.musicplayer.ui.screens.nowplaying
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
@@ -65,7 +73,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +96,8 @@ import com.example.musicplayer.ui.theme.PastelTextSecondary
 
 import androidx.compose.material.icons.filled.Tune
 import com.example.musicplayer.ui.screens.settings.EqualizerCard
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Timer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +121,9 @@ fun NowPlayingScreen(
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistTitle by remember { mutableStateOf("") }
     var isFavorite by remember { mutableStateOf(false) }
+    var showLyricsSheet by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+    val sleepTimerRemaining by viewModel.sleepTimerRemainingMs.collectAsState()
     val context = LocalContext.current
 
     var isDraggingSlider by remember { mutableStateOf(false) }
@@ -135,6 +150,29 @@ fun NowPlayingScreen(
         if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
     }
 
+    val artworkScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.93f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "artworkScale"
+    )
+
+    val shadowElevation by animateDpAsState(
+        targetValue = if (isPlaying) 28.dp else 10.dp,
+        label = "shadowElevation"
+    )
+
+    val favScale by animateFloatAsState(
+        targetValue = if (isFavorite) 1.18f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "favScale"
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -155,281 +193,434 @@ fun NowPlayingScreen(
             },
         color = PastelDarkBg
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Drag handle pill — visual indicator to swipe down
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Atmospheric dynamic aurora glow behind artwork
             Box(
                 modifier = Modifier
-                    .padding(top = 4.dp, bottom = 4.dp)
-                    .size(width = 40.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(PastelTextSecondary.copy(alpha = 0.4f))
+                    .size(380.dp)
+                    .align(Alignment.Center)
+                    .offset(y = (-55).dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                PastelMint.copy(alpha = 0.28f),
+                                PastelLavender.copy(alpha = 0.12f),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
 
-            // Top Header: Down chevron, Header title, EQ & Queue buttons
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Collapse",
-                        tint = PastelTextPrimary,
-                        modifier = Modifier.size(30.dp)
-                    )
-                }
-
-                Text(
-                    text = "NOW PLAYING",
-                    color = PastelLavender,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                )
-
-                Row {
-                    IconButton(onClick = { showEqualizerSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.Tune,
-                            contentDescription = "Equalizer",
-                            tint = if (showEqualizerSheet) PastelMint else PastelTextPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    IconButton(onClick = { showQueueSheet = true }) {
-                        Icon(
-                            Icons.Filled.QueueMusic,
-                            contentDescription = "Queue",
-                            tint = if (showQueueSheet) PastelMint else PastelTextPrimary,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-                }
-            }
-
-            // Large Album Artwork with rounded corners and soft border
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.82f)
-                    .aspectRatio(1f)
-                    .shadow(16.dp, RoundedCornerShape(24.dp), ambientColor = PastelLavender.copy(alpha = 0.2f))
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(PastelCard)
-                    .border(1.dp, PastelBorder, RoundedCornerShape(24.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!track?.artworkUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = track?.artworkUrl,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = PastelLavender,
-                        modifier = Modifier.size(80.dp)
-                    )
-                }
-            }
-
-            // Bottom Controls Grouped Tightly
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Track Title, Artist, and Action Icons (Add to Playlist + Heart + Download)
+                // Drag handle pill
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp, bottom = 2.dp)
+                        .size(width = 42.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(PastelTextSecondary.copy(alpha = 0.35f))
+                )
+
+                // Top Header: Down chevron, Header title with quality pill, Quick action icons
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = track?.title ?: "Select a song",
-                            color = PastelTextPrimary,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = track?.artist ?: "Music Player",
-                            color = PastelTextSecondary,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(PastelCardElevated.copy(alpha = 0.8f))
+                            .border(1.dp, PastelBorder, CircleShape)
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "Collapse",
+                            tint = PastelTextPrimary,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
-                    if (track != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
-                                    viewModel.toggleDownload(track, isDownloaded)
-                                    val nextState = !isDownloaded
-                                    isDownloaded = nextState
-                                    Toast.makeText(
-                                        context,
-                                        if (nextState) "Downloading song for offline..." else "Removed offline song",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "NOW PLAYING",
+                            color = PastelLavender,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Surface(
+                            color = PastelCardElevated.copy(alpha = 0.8f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, PastelBorder)
+                        ) {
+                            Text(
+                                text = "320 KBPS • LOSSLESS",
+                                color = PastelTextSecondary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp)
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(
+                            onClick = { showSleepTimerDialog = true },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Timer,
+                                contentDescription = "Sleep Timer",
+                                tint = if (sleepTimerRemaining != null) PastelMint else PastelTextPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { showEqualizerSheet = true },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Tune,
+                                contentDescription = "Equalizer",
+                                tint = if (showEqualizerSheet) PastelMint else PastelTextPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { showQueueSheet = true },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.QueueMusic,
+                                contentDescription = "Queue",
+                                tint = if (showQueueSheet) PastelMint else PastelTextPrimary,
+                                modifier = Modifier.size(23.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                if (track != null) {
+                                    viewModel.loadLyrics(track.id)
+                                    showLyricsSheet = true
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = if (isDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
-                                    contentDescription = "Download",
-                                    tint = if (isDownloaded) PastelMint else PastelTextSecondary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            IconButton(onClick = { showPlaylistSheet = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.PlaylistAdd,
-                                    contentDescription = "Add to Playlist",
-                                    tint = PastelLavender,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    viewModel.toggleFavorite(track, isFavorite)
-                                    isFavorite = !isFavorite
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                    contentDescription = "Favorite",
-                                    tint = if (isFavorite) PastelRose else PastelTextSecondary,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
+                            },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Lyrics,
+                                contentDescription = "Lyrics",
+                                tint = if (showLyricsSheet) PastelMint else PastelTextPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Scrubbable Progress Slider
-                Slider(
-                    value = sliderPosition,
-                    onValueChange = {
-                        isDraggingSlider = true
-                        draggedSliderValue = it
-                    },
-                    onValueChangeFinished = {
-                        val targetMs = (draggedSliderValue * durationMs).toLong()
-                        viewModel.seekTo(targetMs)
-                        isDraggingSlider = false
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = PastelMint,
-                        activeTrackColor = PastelMint,
-                        inactiveTrackColor = PastelBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Timestamps (Elapsed vs Duration)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // Large Album Artwork with dynamic scale, glowing shadow, and hairline border
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.84f)
+                        .aspectRatio(1f)
+                        .graphicsLayer {
+                            scaleX = artworkScale
+                            scaleY = artworkScale
+                        }
+                        .shadow(
+                            elevation = shadowElevation,
+                            shape = RoundedCornerShape(26.dp),
+                            ambientColor = PastelMint.copy(alpha = 0.4f),
+                            spotColor = PastelLavender.copy(alpha = 0.35f)
+                        )
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(PastelCard)
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(26.dp)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    val currentMs = if (isDraggingSlider) (draggedSliderValue * durationMs).toLong() else positionMs
-                    Text(
-                        text = formatTime(currentMs),
-                        color = PastelTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = formatTime(durationMs),
-                        color = PastelTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    if (!track?.artworkUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = track?.artworkUrl,
+                            contentDescription = "Album Art",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(PastelMint.copy(alpha = 0.3f), PastelLavender.copy(alpha = 0.2f))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = PastelMint,
+                                modifier = Modifier.size(80.dp)
+                            )
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Transport Controls: Shuffle, Prev, Play/Pause, Next, Repeat
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Bottom Controls Section
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
                 ) {
-                    // Shuffle
-                    IconButton(onClick = { viewModel.toggleShuffle() }) {
-                        Icon(
-                            Icons.Filled.Shuffle,
-                            contentDescription = "Shuffle",
-                            tint = if (isShuffle) PastelMint else PastelTextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    // Previous
-                    IconButton(onClick = { viewModel.skipPrevious() }) {
-                        Icon(
-                            Icons.Filled.SkipPrevious,
-                            contentDescription = "Previous",
-                            tint = PastelTextPrimary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-
-                    // Play / Pause Outlined Ring Button
-                    Box(
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                            .background(PastelCardElevated)
-                            .border(2.dp, PastelMint, CircleShape)
-                            .shadow(16.dp, CircleShape, ambientColor = PastelMint.copy(alpha = 0.4f), spotColor = PastelMint.copy(alpha = 0.4f))
-                            .clickable { viewModel.togglePlayPause() },
-                        contentAlignment = Alignment.Center
+                    // Track Title, Artist, and Action Icons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = PastelMint,
-                            modifier = Modifier.size(36.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track?.title ?: "Select a song",
+                                color = PastelTextPrimary,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = track?.artist ?: "Music Player",
+                                color = PastelTextSecondary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        if (track != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.toggleDownload(track, isDownloaded)
+                                        val nextState = !isDownloaded
+                                        isDownloaded = nextState
+                                        Toast.makeText(
+                                            context,
+                                            if (nextState) "Downloading song for offline..." else "Removed offline song",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                                        contentDescription = "Download",
+                                        tint = if (isDownloaded) PastelMint else PastelTextSecondary,
+                                        modifier = Modifier.size(23.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { showPlaylistSheet = true },
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlaylistAdd,
+                                        contentDescription = "Add to Playlist",
+                                        tint = PastelLavender,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        viewModel.toggleFavorite(track, isFavorite)
+                                        isFavorite = !isFavorite
+                                    },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .graphicsLayer {
+                                            scaleX = favScale
+                                            scaleY = favScale
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                        contentDescription = "Favorite",
+                                        tint = if (isFavorite) PastelRose else PastelTextSecondary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Scrubbable Progress Slider
+                    Slider(
+                        value = sliderPosition,
+                        onValueChange = {
+                            isDraggingSlider = true
+                            draggedSliderValue = it
+                        },
+                        onValueChangeFinished = {
+                            val targetMs = (draggedSliderValue * durationMs).toLong()
+                            viewModel.seekTo(targetMs)
+                            isDraggingSlider = false
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = PastelMint,
+                            inactiveTrackColor = PastelBorder.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Timestamps (Elapsed vs Duration)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val currentMs = if (isDraggingSlider) (draggedSliderValue * durationMs).toLong() else positionMs
+                        Text(
+                            text = formatTime(currentMs),
+                            color = PastelTextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = formatTime(durationMs),
+                            color = PastelTextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
-                    // Next
-                    IconButton(onClick = { viewModel.skipNext() }) {
-                        Icon(
-                            Icons.Filled.SkipNext,
-                            contentDescription = "Next",
-                            tint = PastelTextPrimary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Repeat
-                    IconButton(onClick = { viewModel.toggleRepeat() }) {
-                        val repeatIcon = if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat
-                        val repeatTint = if (repeatMode != Player.REPEAT_MODE_OFF) PastelMint else PastelTextSecondary
-                        Icon(
-                            repeatIcon,
-                            contentDescription = "Repeat",
-                            tint = repeatTint,
-                            modifier = Modifier.size(22.dp)
-                        )
+                    // Transport Controls: Shuffle, Prev, Hero Play/Pause, Next, Repeat
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Shuffle with active dot indicator
+                        IconButton(
+                            onClick = { viewModel.toggleShuffle() },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.Shuffle,
+                                    contentDescription = "Shuffle",
+                                    tint = if (isShuffle) PastelMint else PastelTextSecondary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                if (isShuffle) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(PastelMint)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Previous
+                        IconButton(
+                            onClick = { viewModel.skipPrevious() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.SkipPrevious,
+                                contentDescription = "Previous",
+                                tint = PastelTextPrimary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+
+                        // Luminous Hero Play / Pause Button with gradient fill & deep glow
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .shadow(
+                                    elevation = 20.dp,
+                                    shape = CircleShape,
+                                    ambientColor = PastelMint.copy(alpha = 0.6f),
+                                    spotColor = PastelLavender.copy(alpha = 0.5f)
+                                )
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(PastelMint, PastelLavender)
+                                    )
+                                )
+                                .clickable { viewModel.togglePlayPause() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+
+                        // Next
+                        IconButton(
+                            onClick = { viewModel.skipNext() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.SkipNext,
+                                contentDescription = "Next",
+                                tint = PastelTextPrimary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+
+                        // Repeat with active dot indicator
+                        IconButton(
+                            onClick = { viewModel.toggleRepeat() },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            val isRepeatActive = repeatMode != Player.REPEAT_MODE_OFF
+                            val repeatIcon = if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat
+                            val repeatTint = if (isRepeatActive) PastelMint else PastelTextSecondary
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    repeatIcon,
+                                    contentDescription = "Repeat",
+                                    tint = repeatTint,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                if (isRepeatActive) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(PastelMint)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -465,6 +656,9 @@ fun NowPlayingScreen(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        IconButton(onClick = { viewModel.clearQueue() }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Clear Queue", tint = PastelRose, modifier = Modifier.size(20.dp))
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -554,6 +748,14 @@ fun NowPlayingScreen(
                                                 Icons.Filled.MusicNote,
                                                 contentDescription = "Playing",
                                                 tint = PastelMint,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        IconButton(onClick = { viewModel.removeQueueItem(index) }) {
+                                            Icon(
+                                                Icons.Filled.Clear,
+                                                contentDescription = "Remove",
+                                                tint = PastelTextSecondary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
@@ -692,6 +894,108 @@ fun NowPlayingScreen(
             )
         }
 
+        // Lyrics Bottom Sheet
+        if (showLyricsSheet) {
+            val lyrics by viewModel.lyrics.collectAsState()
+            ModalBottomSheet(
+                onDismissRequest = { showLyricsSheet = false },
+                containerColor = PastelDarkBg
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Lyrics",
+                            color = PastelTextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { showLyricsSheet = false }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close",
+                                tint = PastelTextPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val currentLyrics = lyrics
+                    if (currentLyrics.isNullOrBlank()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(PastelLavender.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Lyrics,
+                                    contentDescription = null,
+                                    tint = PastelLavender,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No lyrics available for this track",
+                                color = PastelTextSecondary,
+                                fontSize = 14.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(400.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, PastelBorder, RoundedCornerShape(16.dp)),
+                            color = PastelCard
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp)
+                            ) {
+                                androidx.compose.foundation.lazy.LazyColumn(
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(currentLyrics.split("\n")) { line ->
+                                        Text(
+                                            text = line,
+                                            color = PastelTextPrimary,
+                                            fontSize = 14.sp,
+                                            lineHeight = 24.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+
         // Quick Equalizer Bottom Sheet
         if (showEqualizerSheet) {
             ModalBottomSheet(
@@ -714,6 +1018,44 @@ fun NowPlayingScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
+        }
+        if (showSleepTimerDialog) {
+            val timerOptions = listOf(15, 30, 45, 60, 90, 120)
+            AlertDialog(
+                onDismissRequest = { showSleepTimerDialog = false },
+                title = { Text("Sleep Timer", color = PastelTextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        timerOptions.forEach { mins ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.startSleepTimer(mins * 60 * 1000L)
+                                    showSleepTimerDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("$mins minutes", color = PastelTextPrimary)
+                            }
+                        }
+                        TextButton(
+                            onClick = {
+                                viewModel.cancelSleepTimer()
+                                showSleepTimerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Turn Off", color = PastelRose)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSleepTimerDialog = false }) {
+                        Text("Close", color = PastelMint)
+                    }
+                },
+                containerColor = PastelCard,
+                shape = RoundedCornerShape(18.dp)
+            )
         }
     }
 }

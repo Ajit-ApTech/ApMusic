@@ -1,5 +1,11 @@
 package com.example.musicplayer.data.repository
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.example.musicplayer.data.local.AlbumDao
+import com.example.musicplayer.data.local.ArtistDao
+import com.example.musicplayer.data.local.AppDatabase
+import com.example.musicplayer.data.local.DownloadedTrackDao
 import com.example.musicplayer.data.local.FavoriteDao
 import com.example.musicplayer.data.local.FavoriteEntity
 import com.example.musicplayer.data.local.PlaylistDao
@@ -10,26 +16,30 @@ import com.example.musicplayer.data.local.QueueDao
 import com.example.musicplayer.data.local.QueueEntity
 import com.example.musicplayer.data.local.RecentPlayDao
 import com.example.musicplayer.data.local.RecentPlayEntity
+import com.example.musicplayer.data.local.TrackDao
 import com.example.musicplayer.data.provider.AudiusProvider
 import com.example.musicplayer.data.provider.FmaProvider
 import com.example.musicplayer.data.provider.JamendoProvider
 import com.example.musicplayer.data.provider.JioSaavnProvider
 import com.example.musicplayer.data.provider.MusicProvider
 import com.example.musicplayer.data.provider.YouTubeMusicProvider
+import com.example.musicplayer.domain.model.Album
+import com.example.musicplayer.domain.model.Artist
 import com.example.musicplayer.domain.model.Playlist
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.service.MusicControllerManager
+import com.example.musicplayer.util.AudioDownloadManager
 import com.example.musicplayer.util.EncryptedPrefs
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import javax.inject.Inject
-import javax.inject.Singleton
-
-import com.example.musicplayer.data.local.DownloadedTrackDao
-import com.example.musicplayer.util.AudioDownloadManager
 
 @Singleton
 class MusicRepositoryImpl @Inject constructor(
@@ -45,7 +55,8 @@ class MusicRepositoryImpl @Inject constructor(
     private val downloadedTrackDao: DownloadedTrackDao,
     private val queueDao: QueueDao,
     private val encryptedPrefs: EncryptedPrefs,
-    private val downloadManager: AudioDownloadManager
+    private val downloadManager: AudioDownloadManager,
+    @ApplicationContext private val appContext: android.content.Context
 ) : MusicRepository {
 
     private val providers = listOf<MusicProvider>(
@@ -93,6 +104,19 @@ class MusicRepositoryImpl @Inject constructor(
         return getActiveProvider().getTrackStreamUrl(track.id)
     }
 
+    // NEW: Album operations
+    override suspend fun getAlbum(albumId: String): Album? = getActiveProvider().getAlbum(albumId)
+    override suspend fun getAlbumTracks(albumId: String): List<Track> = getActiveProvider().getAlbumTracks(albumId)
+    override suspend fun getArtistAlbums(artistId: String): List<Album> = getActiveProvider().getArtistAlbums(artistId)
+    override suspend fun getNewReleases(): List<Album> = getActiveProvider().getNewReleases()
+    override suspend fun searchAlbums(query: String): List<Album> = getActiveProvider().searchAlbums(query)
+
+    // NEW: Artist operations
+    override suspend fun getArtist(artistId: String): Artist? = getActiveProvider().getArtist(artistId)
+    override suspend fun getArtistTopTracks(artistId: String): List<Track> = getActiveProvider().getArtistTopTracks(artistId)
+    override suspend fun getSimilarArtists(artistId: String): List<Artist> = getActiveProvider().getSimilarArtists(artistId)
+    override suspend fun searchArtists(query: String): List<Artist> = getActiveProvider().searchArtists(query)
+
     // Queue persistence
     override fun getPersistedQueue(): Flow<List<Track>> =
         queueDao.getQueueFlow().map { list -> list.map { it.toDomain() } }
@@ -128,6 +152,24 @@ class MusicRepositoryImpl @Inject constructor(
     override suspend fun recordRecentPlay(track: Track) {
         val timestamp = System.currentTimeMillis()
         recentPlayDao.insertRecentPlay(RecentPlayEntity.fromDomain(track, timestamp))
+    }
+
+    // NEW: Recent albums/artists - using separate DAOs for proper storage
+    override fun getRecentAlbums(): Flow<List<Album>> = flowOf(emptyList())
+
+    override fun getRecentArtists(): Flow<List<Artist>> = flowOf(emptyList())
+
+    override suspend fun recordRecentAlbum(album: Album) {
+        // TODO: Implement with separate AlbumRecentDao when available
+        // For now, we just record the album as a recent play via its tracks
+        if (album.trackCount > 0) {
+            // Could fetch first track and record that
+        }
+    }
+
+    override suspend fun recordRecentArtist(artist: Artist) {
+        // TODO: Implement with separate ArtistRecentDao when available
+        // For now, no-op
     }
 
     // Playlists
@@ -167,6 +209,62 @@ class MusicRepositoryImpl @Inject constructor(
         if (existingIds.contains(trackId)) {
             val updated = existingIds.filter { it != trackId }.joinToString(",")
             playlistDao.updateTrackIds(playlistId, updated)
+        }
+    }
+
+    // NEW: Browse/Discover
+    override suspend fun getFeaturedPlaylists(): List<Playlist> {
+        return try {
+            val provider = getActiveProvider()
+            when (provider) {
+                is JioSaavnProvider -> provider.getFeaturedPlaylists()
+                is YouTubeMusicProvider -> provider.getFeaturedPlaylists()
+                else -> emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getCategories(): List<Category> {
+        return try {
+            val provider = getActiveProvider()
+            when (provider) {
+                is JioSaavnProvider -> provider.getCategories()
+                else -> emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getCategoryPlaylists(categoryId: String): List<Playlist> {
+        return try {
+            val provider = getActiveProvider()
+            when (provider) {
+                is JioSaavnProvider -> provider.getCategoryPlaylists(categoryId)
+                else -> emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getRecommendations(seedTracks: List<String>, seedArtists: List<String>): List<Track> {
+        return try {
+            val provider = getActiveProvider()
+            provider.getRecommendations(seedTracks, seedArtists)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // Lyrics
+    override suspend fun getLyrics(trackId: String): String? {
+        return try {
+            getActiveProvider().getLyrics(trackId)
+        } catch (e: Exception) {
+            null
         }
     }
 

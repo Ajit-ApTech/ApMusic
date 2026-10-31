@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.data.provider.MusicProvider
 import com.example.musicplayer.data.repository.MusicRepository
+import com.example.musicplayer.domain.model.Album
+import com.example.musicplayer.domain.model.Artist
+import com.example.musicplayer.domain.model.Playlist
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.service.MusicControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,8 +30,20 @@ class HomeViewModel @Inject constructor(
     private val _recentPlays = MutableStateFlow<List<Track>>(emptyList())
     val recentPlays: StateFlow<List<Track>> = _recentPlays.asStateFlow()
 
+    private val _newReleases = MutableStateFlow<List<Album>>(emptyList())
+    val newReleases: StateFlow<List<Album>> = _newReleases.asStateFlow()
+
+    private val _popularArtists = MutableStateFlow<List<Artist>>(emptyList())
+    val popularArtists: StateFlow<List<Artist>> = _popularArtists.asStateFlow()
+
+    private val _featuredPlaylists = MutableStateFlow<List<Playlist>>(emptyList())
+    val featuredPlaylists: StateFlow<List<Playlist>> = _featuredPlaylists.asStateFlow()
+
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isLoadingBrowse = MutableStateFlow(true)
+    val isLoadingBrowse: StateFlow<Boolean> = _isLoadingBrowse.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -55,13 +70,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.activeProviderFlow.collectLatest {
                 loadTrending()
+                loadBrowseData()
             }
         }
     }
 
     fun loadTrending() {
         viewModelScope.launch {
-            _isLoading.value = true
             _errorMessage.value = null
             try {
                 val results = repository.getTrending()
@@ -80,9 +95,53 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun loadBrowseData() {
+        viewModelScope.launch {
+            _isLoadingBrowse.value = true
+            try {
+                _newReleases.value = repository.getNewReleases()
+            } catch (e: Exception) {
+                _newReleases.value = emptyList()
+            }
+            try {
+                _featuredPlaylists.value = repository.getFeaturedPlaylists()
+            } catch (e: Exception) {
+                _featuredPlaylists.value = emptyList()
+            }
+            // Popular artists - derive from trending tracks
+            try {
+                val trending = repository.getTrending()
+                val artists = trending.mapNotNull { track ->
+                    val artistId = track.artistId
+                    if (artistId != null) {
+                        Artist(
+                            id = artistId,
+                            name = track.artist,
+                            artworkUrl = track.artworkUrl,
+                            popularity = track.popularity
+                        )
+                    } else null
+                }.distinctBy { it.id }.sortedByDescending { it.popularity }.take(10)
+                _popularArtists.value = artists
+            } catch (e: Exception) {
+                _popularArtists.value = emptyList()
+            }
+            _isLoadingBrowse.value = false
+        }
+    }
+
     fun playTrack(track: Track, fromTrending: Boolean = true) {
         val q = if (fromTrending && _trending.value.isNotEmpty()) _trending.value else listOf(track)
         controllerManager.playTrack(track, q)
+    }
+
+    fun playAlbum(album: Album) {
+        viewModelScope.launch {
+            val tracks = repository.getAlbumTracks(album.id)
+            if (tracks.isNotEmpty()) {
+                controllerManager.playTrack(tracks.first(), tracks)
+            }
+        }
     }
 
     fun downloadTrack(track: Track) {

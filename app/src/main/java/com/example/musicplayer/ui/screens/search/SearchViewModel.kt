@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.data.repository.MusicRepository
+import com.example.musicplayer.domain.model.Album
+import com.example.musicplayer.domain.model.Artist
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.service.MusicControllerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,8 +32,14 @@ class SearchViewModel @Inject constructor(
     private val _query = MutableStateFlow(savedStateHandle.get<String>(KEY_QUERY) ?: "")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    private val _results = MutableStateFlow<List<Track>>(emptyList())
-    val results: StateFlow<List<Track>> = _results.asStateFlow()
+    private val _tracks = MutableStateFlow<List<Track>>(emptyList())
+    val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
+
+    private val _albums = MutableStateFlow<List<Album>>(emptyList())
+    val albums: StateFlow<List<Album>> = _albums.asStateFlow()
+
+    private val _artists = MutableStateFlow<List<Artist>>(emptyList())
+    val artists: StateFlow<List<Artist>> = _artists.asStateFlow()
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
@@ -55,7 +64,9 @@ class SearchViewModel @Inject constructor(
                     if (q.isNotBlank()) {
                         performSearch(q)
                     } else {
-                        _results.value = emptyList()
+                        _tracks.value = emptyList()
+                        _albums.value = emptyList()
+                        _artists.value = emptyList()
                         _isSearching.value = false
                     }
                 }
@@ -73,10 +84,19 @@ class SearchViewModel @Inject constructor(
     private suspend fun performSearch(q: String) {
         _isSearching.value = true
         try {
-            val list = repository.search(q)
-            _results.value = list
+            _tracks.value = repository.search(q)
+            try {
+                _albums.value = repository.searchAlbums(q)
+            } catch (e: Exception) {
+                _albums.value = emptyList()
+            }
+            try {
+                _artists.value = repository.searchArtists(q)
+            } catch (e: Exception) {
+                _artists.value = emptyList()
+            }
         } catch (e: Exception) {
-            _results.value = emptyList()
+            _tracks.value = emptyList()
         } finally {
             _isSearching.value = false
         }
@@ -84,10 +104,10 @@ class SearchViewModel @Inject constructor(
 
     fun playTrack(track: Track) {
         viewModelScope.launch {
-            controllerManager.playTrack(track, _results.value.ifEmpty { listOf(track) })
+            controllerManager.playTrack(track, _tracks.value.ifEmpty { listOf(track) })
             val similar = repository.getSimilarTracks(track)
-            val smartQueue = _results.value.ifEmpty { listOf(track) } + similar.filter { t ->
-                t.id != track.id && _results.value.none { it.id == t.id }
+            val smartQueue = _tracks.value.ifEmpty { listOf(track) } + similar.filter { t ->
+                t.id != track.id && _tracks.value.none { it.id == t.id }
             }
             controllerManager.updateQueue(smartQueue)
         }

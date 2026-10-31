@@ -1,16 +1,21 @@
 package com.example.musicplayer.ui.screens.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.musicplayer.domain.model.Album
+import com.example.musicplayer.domain.model.Artist
 import com.example.musicplayer.ui.screens.home.TrackRowItem
 import com.example.musicplayer.ui.theme.PastelBorder
 import com.example.musicplayer.ui.theme.PastelCard
@@ -42,6 +50,7 @@ import com.example.musicplayer.ui.theme.PastelCardElevated
 import com.example.musicplayer.ui.theme.PastelDarkBg
 import com.example.musicplayer.ui.theme.PastelLavender
 import com.example.musicplayer.ui.theme.PastelMint
+import com.example.musicplayer.ui.theme.PastelRose
 import com.example.musicplayer.ui.theme.PastelTextPrimary
 import com.example.musicplayer.ui.theme.PastelTextSecondary
 
@@ -52,7 +61,9 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val query by viewModel.query.collectAsState()
-    val results by viewModel.results.collectAsState()
+    val tracks by viewModel.tracks.collectAsState()
+    val albums by viewModel.albums.collectAsState()
+    val artists by viewModel.artists.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
 
     val downloadedTracks by viewModel.downloadedTracks.collectAsState(initial = emptyList())
@@ -86,7 +97,7 @@ fun SearchScreen(
                 onValueChange = { viewModel.onQueryChanged(it) },
                 placeholder = {
                     Text(
-                        "Search songs, artists, or soundtracks...",
+                        "Search songs, albums, artists...",
                         color = PastelTextSecondary,
                         fontSize = 14.sp
                     )
@@ -141,7 +152,7 @@ fun SearchScreen(
                 ) {
                     CircularProgressIndicator(color = PastelMint, strokeWidth = 2.5.dp)
                 }
-            } else if (query.isNotBlank() && results.isEmpty()) {
+            } else if (query.isNotBlank() && tracks.isEmpty() && albums.isEmpty() && artists.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -150,7 +161,7 @@ fun SearchScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No songs found for \"$query\"",
+                            text = "No results found for \"$query\"",
                             color = PastelTextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
@@ -194,7 +205,7 @@ fun SearchScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Search across Indian, Bollywood, and international songs",
+                            text = "Search songs, albums, and artists across providers",
                             color = PastelTextSecondary,
                             fontSize = 13.sp
                         )
@@ -205,23 +216,154 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 110.dp)
                 ) {
-                    items(results, key = { it.id }) { track ->
-                        val isDownloaded = downloadedIds.contains(track.id)
-                        val state = downloadStates[track.id]
-                        TrackRowItem(
-                            track = track,
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            isDownloaded = isDownloaded,
-                            downloadState = state,
-                            onDownloadClick = { viewModel.downloadTrack(track) },
-                            onClick = {
-                                viewModel.playTrack(track)
-                                onOpenNowPlaying()
+                    // Albums Section in Search
+                    if (albums.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Albums",
+                                color = PastelTextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp)
+                            ) {
+                                items(albums, key = { "search_album_${it.id}" }) { album ->
+                                    SearchAlbumCard(album = album, onClick = {
+                                        navController.navigate("album/${album.id}")
+                                    })
+                                }
                             }
-                        )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+
+                    // Artists Section in Search
+                    if (artists.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Artists",
+                                color = PastelTextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp)
+                            ) {
+                                items(artists, key = { "search_artist_${it.id}" }) { artist ->
+                                    SearchArtistCard(artist = artist, onClick = {
+                                        navController.navigate("artist/${artist.id}")
+                                    })
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+
+                    // Songs Section in Search
+                    if (tracks.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Songs",
+                                color = PastelTextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        items(tracks, key = { "search_track_${it.id}" }) { track ->
+                            val isDownloaded = downloadedIds.contains(track.id)
+                            val state = downloadStates[track.id]
+                            TrackRowItem(
+                                track = track,
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                isDownloaded = isDownloaded,
+                                downloadState = state,
+                                onDownloadClick = { viewModel.downloadTrack(track) },
+                                onClick = {
+                                    viewModel.playTrack(track)
+                                    onOpenNowPlaying()
+                                }
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SearchAlbumCard(album: Album, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .width(130.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() },
+        color = PastelCard
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            AsyncImage(
+                model = album.artworkUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(110.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = album.name,
+                color = PastelTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Text(
+                text = album.artist,
+                color = PastelTextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun SearchArtistCard(artist: Artist, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .width(110.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() },
+        color = PastelCard
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AsyncImage(
+                model = artist.artworkUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = artist.name,
+                color = PastelTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }
